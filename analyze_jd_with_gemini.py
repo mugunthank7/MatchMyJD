@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+
+import os
+import json
+import sys
+import re
+from dotenv import load_dotenv
+import google.generativeai as genai
+from preprocess_JD import preprocess_jd
+
+MODEL_NAME = "gemini-2.5-flash"
+
+
+# ---------------------- CLEAN JSON ------------------------
+def extract_json(text: str) -> dict:
+    """
+    Removes markdown fences and extracts valid JSON.
+    Works for all Gemini SDK versions.
+    """
+    if not text:
+        raise RuntimeError("Gemini returned empty response.")
+
+    # Remove ```json ... ```
+    text = text.replace("```json", "").replace("```", "").strip()
+
+    # Find first JSON object
+    match = re.search(r"\{[\s\S]*\}", text)
+    if not match:
+        raise RuntimeError(f"Could not find JSON in response:\n{text}")
+
+    json_str = match.group(0)
+
+    try:
+        return json.loads(json_str)
+    except Exception:
+        raise RuntimeError(f"Gemini returned invalid JSON:\n\n{json_str}")
+
+
+# ---------------------- PROMPT ----------------------------
+def build_prompt(cleaned_jd: str) -> str:
+    return f"""
+Extract the following fields from the job description and return VALID JSON ONLY:
+
+- role_title
+- seniority_level
+- hard_skills
+- tools_and_frameworks
+- domains
+- soft_skills
+- key_responsibility_phrases
+- must_have_keywords
+- nice_to_have_keywords
+
+Format EXACTLY:
+
+{{
+  "role_title": "",
+  "seniority_level": "",
+  "hard_skills": [],
+  "tools_and_frameworks": [],
+  "domains": [],
+  "soft_skills": [],
+  "key_responsibility_phrases": [],
+  "must_have_keywords": [],
+  "nice_to_have_keywords": []
+}}
+
+NO comments.
+NO markdown.
+NO explanation.
+
+Job Description:
+{cleaned_jd}
+"""
+
+
+# ---------------------- CONFIG ----------------------------
+def configure_gemini():
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("Missing GEMINI_API_KEY in .env")
+    genai.configure(api_key=api_key)
+
+
+# ---------------------- MAIN ANALYSIS ----------------------
+def analyze_jd(raw_jd: str):
+    cleaned = preprocess_jd(raw_jd)
+    prompt = build_prompt(cleaned)
+
+    model = genai.GenerativeModel(MODEL_NAME)
+
+    response = model.generate_content(prompt)
+
+    # Extract safely
+    text = ""
+    try:
+        text = response.text
+    except:
+        # older SDK fallback
+        text = response.candidates[0].content.parts[0].text
+
+    return extract_json(text)
+
+
+# ---------------------- CLI -------------------------------
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python3 analyze_JD_with_gemini.py jd.txt")
+        sys.exit(1)
+
+    jd_path = sys.argv[1]
+    with open(jd_path, "r", encoding="utf-8") as f:
+        jd_raw = f.read()
+
+    configure_gemini()
+    result = analyze_jd(jd_raw)
+
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,5 @@
+pypdf
+spacy
+sentence-transformers
+scikit-learn
+typer[all]
