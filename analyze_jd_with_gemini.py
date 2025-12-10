@@ -39,19 +39,35 @@ def extract_json(text: str) -> dict:
 # ---------------------- PROMPT ----------------------------
 def build_prompt(cleaned_jd: str) -> str:
     return f"""
-Extract the following fields from the job description and return VALID JSON ONLY:
+You are an expert ATS job description parser. 
+Extract ONLY actual technical skills and competencies — nothing else.
 
-- role_title
-- seniority_level
-- hard_skills
-- tools_and_frameworks
-- domains
-- soft_skills
-- key_responsibility_phrases
-- must_have_keywords
-- nice_to_have_keywords
+STRICT RULES:
+- DO NOT extract responsibilities (e.g., "apply engineering principles", "collaborate", "work with teams")
+- DO NOT extract eligibility requirements (e.g., "currently pursuing a degree", "must have 1 semester remaining")
+- DO NOT extract soft statements (e.g., "ability to demonstrate", "quickly learns new methods")
+- DO NOT extract general phrases like "problem solving" unless explicitly listed under skills.
+- DO NOT extract full sentences.
+- DO NOT extract company values or mission statements.
 
-Format EXACTLY:
+EXTRACT ONLY:
+1. hard_skills  
+   → Pure technical competencies (e.g., Data Structures, Algorithms, Software Engineering, Operating Systems, Distributed Systems)
+
+2. tools_and_frameworks  
+   → Actual tools/frameworks explicitly mentioned (e.g., Git, Linux, Java, Python, Docker)
+
+3. domains  
+   → Technical specialty areas (e.g., Software Engineering, Backend Systems, Cloud Infrastructure)
+
+4. must_have_keywords  
+   → Key technical requirements from the JD (ONLY skills — not requirements)
+
+5. nice_to_have_keywords  
+   → Optional technical skills or preferred qualifications
+
+
+OUTPUT FORMAT (NO extra text, NO markdown):
 
 {{
   "role_title": "",
@@ -65,13 +81,10 @@ Format EXACTLY:
   "nice_to_have_keywords": []
 }}
 
-NO comments.
-NO markdown.
-NO explanation.
-
 Job Description:
 {cleaned_jd}
 """
+
 
 
 # ---------------------- CONFIG ----------------------------

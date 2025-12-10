@@ -3,3 +3,6 @@ spacy
 sentence-transformers
 scikit-learn
 typer[all]
+pypdf
+docx2txt
+python-dotenv
