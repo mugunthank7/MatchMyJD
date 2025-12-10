@@ -1,70 +1,65 @@
 """
 MatchMyJD - Global Configuration Settings
 -----------------------------------------
-
-Every module in the system reads from this file.
-No hardcoded values anywhere else.
-Easy to tune, experiment, and improve match quality.
+NO API KEYS ARE LOADED INSIDE THIS FILE.
+Only constants, weights, and normalization rules.
 """
-
 # ============================================================
 # 🔧 GEMINI MODEL CONFIGURATION
 # ============================================================
 
 GEMINI_MODEL_JD = "gemini-2.5-flash"
 GEMINI_MODEL_RESUME = "gemini-2.5-flash"
-GEMINI_MODEL_EMBEDDINGS = "gemini-embedding-001"   # for semantic similarity
+GEMINI_MODEL_EMBEDDINGS = "gemini-embedding-001"
 
-MAX_TOKENS = 4096  # safe limit for responses
+MAX_TOKENS = 4096
 
 # ============================================================
 # 🔧 MATCHING WEIGHTS
 # ============================================================
-# These weights determine the hybrid score calculation
 
 WEIGHTS = {
-    "exact_match": 0.30,       # direct string match
-    "fuzzy_match": 0.20,       # token overlap similarity
-    "semantic_match": 0.50     # embedding similarity
+    "exact_match": 0.30,
+    "fuzzy_match": 0.20,
+    "semantic_match": 0.50,
 }
 
-# Thresholds for final classification
+CATEGORY_WEIGHTS = {
+    "hard": 0.40,
+    "tools": 0.20,
+    "soft": 0.10,
+    "domains": 0.30,
+}
+
 THRESHOLDS = {
     "excellent": 0.80,
     "good": 0.60,
     "fair": 0.40,
-    "poor": 0.20
+    "poor": 0.20,
 }
 
 # ============================================================
 # 🔧 TEXT NORMALIZATION RULES
 # ============================================================
 
-# Convert variants → canonical names
 SKILL_SYNONYMS = {
     "ml": "machine learning",
     "machine-learning": "machine learning",
     "ai": "artificial intelligence",
     "nlp": "natural language processing",
     "asr": "speech recognition",
-    "data science": "data science",
-    "big data": "big data",
     "ds": "data science",
     "s2s": "speech-to-speech",
-    "speech2speech": "speech-to-speech",
-    "neural networks": "deep learning",
     "nn": "deep learning",
     "stats": "statistics",
-    "probability and statistics": "statistics",
 }
 
-# These will be stripped from skills
 STOPWORDS = {
     "and", "or", "the", "basic", "knowledge", "experience", "with"
 }
 
 # ============================================================
-# 🔧 RESUME SECTION HEADERS
+# 🔧 RESUME SECTIONS
 # ============================================================
 
 RESUME_SECTIONS = [
@@ -79,12 +74,11 @@ RESUME_SECTIONS = [
 ]
 
 # ============================================================
-# 🔧 LOGGING SETTINGS
+# 🔧 DEBUG LOGGING
 # ============================================================
 
-DEBUG = True     # global debug switch
+DEBUG = True
 
-# Simple debug printer
 def debug_log(msg):
     if DEBUG:
         print(f"[DEBUG] {msg}")

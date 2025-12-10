@@ -1,39 +1,73 @@
 #!/usr/bin/env python3
 
+"""
+MatchMyJD Pipeline Runner
+Loads API key from .env automatically.
+Does NOT expose key at any point.
+"""
+
 import json
-from analyze_jd_with_gemini import analyze_jd, configure_gemini  # your JD file
-from resume_analyzer import analyze_resume                       # our working one
-from matcher import match_jd_and_resume
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
+
+from config.settings import debug_log
+from core.resume_analyzer import analyze_resume
+from core.jd_analyzer import analyze_jd
+from matching.hybrid_scorer import hybrid_match
 
 
-def main():
-    jd_path = "jd.txt"                      # or take from CLI if you prefer
-    resume_path = "Mugunthan_Kesavan-2.pdf"
+# -----------------------------------------------
+# PATHS
+# -----------------------------------------------
+RESUME_PATH = "data/samples/sample_resume.pdf"
+JD_PATH = "data/samples/sample_jd.txt"
 
-    # 1) Load JD text
-    with open(jd_path, "r", encoding="utf-8") as f:
-        jd_raw = f.read()
 
-    # 2) Configure Gemini once
+# -----------------------------------------------
+# Load .env and configure Gemini
+# -----------------------------------------------
+def configure_gemini():
+    # Load environment file
+    load_dotenv()
+
+    api_key = os.getenv("GEMINI_API_KEY")
+
+    if not api_key:
+        raise ValueError("❌ GEMINI_API_KEY not found in .env")
+
+    genai.configure(api_key=api_key)
+    debug_log("Gemini client configured using key from .env")
+
+
+# -----------------------------------------------
+# Main Pipeline
+# -----------------------------------------------
+def run_pipeline():
+
+    debug_log("🚀 Starting MatchMyJD pipeline...")
+
     configure_gemini()
 
-    # 3) Analyze JD & Resume
-    print("🔍 Analyzing JD with Gemini...")
-    jd_data = analyze_jd(jd_raw)
+    # Analyze Resume
+    resume_data = analyze_resume(RESUME_PATH)
 
-    print("📄 Analyzing Resume with Gemini...")
-    resume_data = analyze_resume(resume_path)
+    # Analyze JD
+    with open(JD_PATH, "r") as f:
+        jd_text = f.read()
 
-    # 4) Match
-    print("🤝 Matching JD & Resume...")
-    match_result = match_jd_and_resume(jd_data, resume_data)
+    jd_data = analyze_jd(jd_text)
 
-    # 5) Pretty print
-    print("\n========== MATCH RESULT ==========\n")
-    print(json.dumps(match_result, indent=2, ensure_ascii=False))
+    # Hybrid scoring
+    result = hybrid_match(jd_data, resume_data)
 
-    print(f"\n✅ Match Score: {match_result['match_score']}%")
+    return result
 
 
 if __name__ == "__main__":
-    main()
+    output = run_pipeline()
+
+    print("\n==============================")
+    print("📌 FINAL MATCH RESULT")
+    print("==============================\n")
+    print(json.dumps(output, indent=2, ensure_ascii=False))

@@ -1,19 +1,39 @@
 About the job
-Overview
-Come build community, explore your passions and do your best work at Microsoft with thousands of University interns from every corner of the world. This opportunity will allow you to bring your aspirations, talent, potential—and excitement for the journey ahead.
-As a Software Engineering Intern, you will work with teammates to solve problems and build innovative software solutions. You will apply your passion for customers and product quality as you provide technical guidance to Technical Program Managers and Product Managers. You will learn and adopt relevant new technologies, tools, methods, and processes to leverage in your solutions. This opportunity will enable you to advance your career by designing, developing, and testing next-generation software that will empower every person and organization on the planet to achieve more.
-At Microsoft, Interns work on real-world projects in collaboration with teams across the world, while having fun along the way. You’ll be empowered to build community, explore your passions and achieve your goals. This is your chance to bring your solutions and ideas to life while working on cutting-edge technology.
-Microsoft’s mission is to empower every person and every organization on the planet to achieve more. As employees we come together with a growth mindset, innovate to empower others, and collaborate to realize our shared goals. Each day we build on our values of respect, integrity, and accountability to create a culture of inclusion where everyone can thrive at work and beyond.
+C3 AI (NYSE: AI), is the Enterprise AI application software company. C3 AI delivers a family of fully integrated products including the C3 Agentic AI Platform, an end-to-end platform for developing, deploying, and operating enterprise AI applications, C3 AI applications, a portfolio of industry-specific SaaS enterprise AI applications that enable the digital transformation of organizations globally, and C3 Generative AI, a suite of domain-specific generative AI offerings for the enterprise. Learn more at: C3 AI
+
+C3 AI is searching for brilliant and ambitious Data Scientist Interns to join our Summer 2026 cohort. This isn't just about running models; you'll be on the front lines, working with iconic global brands on their digital transformation. You will tackle massive, complex datasets to build the next generation of enterprise AI applications that deliver real-world results.
+
+As a Data Science Intern, you are a problem-solver and a strategist. You will dive deep into customer challenges, partnering with our expert data scientists, software engineers, and industry specialists. Your mission will be to design and deploy sophisticated machine learning algorithms—from predictive maintenance to fraud detection—at an enterprise scale using our revolutionary C3 AI Suite. You won't just analyze data; you'll turn it into intelligence that drives critical business decisions.
+
 Responsibilities
-Apply engineering principles to solve complex problems through sound and creative engineering. 
-Work with appropriate stakeholders to determine user requirements for a feature.
-Quickly learns new engineering methods and incorporates them into work processes. 
-Seek feedback and apply internal or industry best practices to improve technical solutions. 
-Demonstrate skill in time management and completing software projects in a cooperative team environment.
-Review current developments and proactively seek new knowledge that will improve the availability, reliability, efficiency, observability, and performance of products while also driving consistency in monitoring and operations at scale.
+
+Drive adoption of Deep Learning systems into the next generation of C3 AI products
+Design and deploy Machine Learning algorithms for industrial applications such as fraud detection and predictive maintenance
+Collaborate with data and subject matter experts from C3 AI and its customer teams to seek, understand, validate, interpret, and correctly use new data elements
+
 Qualifications
-Currently pursuing Bachelor’s or Master’s degree in Computer Science, Engineering, or related field
-Must have at least 1 semester/term remaining following the completion of the internship
-Ability to demonstrate an understanding of computer science fundamentals, including data structures and algorithms
-This position will be open for a minimum of 5 days, with applications accepted on an ongoing basis until the position is filled.
-Microsoft is an equal opportunity employer. All qualified applicants will receive consideration for employment without regard to age, ancestry, citizenship, color, family or medical care leave, gender identity or expression, genetic information, immigration status, marital status, medical condition, national origin, physical or mental disability, political affiliation, protected veteran or military status, race, ethnicity, religion, sex (including pregnancy), sexual orientation, or any other characteristic protected by applicable local laws, regulations and ordinances. If you need assistance with religious accommodations and/or a reasonable accommodation due to a disability during the application process, read more about requesting accommodations.
+
+Pursuing MS or PhD in Computer Science, Electrical Engineering, Statistics, or equivalent field
+Applied Machine Learning experience (regression and classification, supervised, and unsupervised learning)
+Experience with prototyping languages such as Python and R
+Strong mathematical background (linear algebra, calculus, probability, and statistics)
+Experience with scalable ML (MapReduce, streaming)
+Ability to drive a project and work both independently and in a team
+Smart, motivated, can-do attitude, and seeks to make a difference
+Proficient in spoken and written English
+
+Preferred Qualifications
+
+Experience with JavaScript and Java
+Experience with time series and dynamical system
+A portfolio of projects (GitHub, papers, etc.)
+
+C3 AI provides excellent benefits and a competitive compensation package, which include: 
+
+Salary range: $6,000 - $8,000 USD per month.
+
+At the office, we offer a fully stocked kitchen with catered lunches, a free on-site gym membership, Friday social hours with food, drinks, music, and plenty of opportunities to connect and network with your team.
+
+C3 AI is proud to be an Equal Opportunity and Affirmative Action Employer. We do not discriminate on the basis of any legally protected characteristics, including disabled and veteran status.
+
+

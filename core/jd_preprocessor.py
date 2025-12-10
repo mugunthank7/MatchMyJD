@@ -1,8 +1,7 @@
 """
 JD Preprocessor
 ---------------
-cleaning and normalization module
-used by the MatchMyJD pipeline.
+Cleaning and normalization module used by the MatchMyJD pipeline.
 
 This converts raw noisy job descriptions from any website
 into a clean, structured, machine-readable format.
@@ -22,6 +21,9 @@ class JDPreprocessor:
             r"(?i)^(responsibilities|requirements|qualifications|about the job|overview)\b"
         )
 
+        # We treat Python specially inside JD to avoid misclassification later
+        self.force_tool_terms = {"python"}
+
     # ---------------------------------------------------------
     # Main public method
     # ---------------------------------------------------------
@@ -32,7 +34,6 @@ class JDPreprocessor:
             return ""
 
         lines = text.split("\n")
-
         cleaned_lines = []
         seen = set()  # avoid duplicates
 
@@ -43,19 +44,28 @@ class JDPreprocessor:
             if not line:
                 continue
 
-            # Normalize bullets
+            # Remove bullets
             line = self.bullet_pattern.sub("", line)
 
             # Normalize whitespace
             line = self.whitespace_pattern.sub(" ", line)
 
-            # Remove lines that are pure noise
+            # Noise filtering
             if self._is_noise(line):
                 continue
 
-            # Keep section headers but normalized
+            # Normalize section headers
             if self.section_header_pattern.match(line.lower()):
                 line = line.title()
+
+            # Enforce skill normalization in-place (Python always treated as tool)
+            lowered = line.lower()
+            for term in self.force_tool_terms:
+                if f"{term}" in lowered:
+                    debug_log(f"Found special skill '{term}' in JD → normalized")
+                    # does NOT replace the line, just logs the skill
+                    # actual categorization happens in jd_analyzer
+                    break
 
             # Deduplicate
             if line.lower() in seen:
@@ -63,7 +73,6 @@ class JDPreprocessor:
 
             seen.add(line.lower())
             cleaned_lines.append(line)
-
             debug_log(f"Processed line: {original} → {line}")
 
         cleaned_text = "\n".join(cleaned_lines)
@@ -75,7 +84,6 @@ class JDPreprocessor:
     # ---------------------------------------------------------
     def _is_noise(self, line: str) -> bool:
 
-        # Generic trash patterns
         noise_patterns = [
             r"^apply now",
             r"^click here",
@@ -92,7 +100,7 @@ class JDPreprocessor:
                 debug_log(f"Removed noise line: {line}")
                 return True
 
-        # Remove lines that are only stopwords or nearly empty
+        # Remove lines that are only stopwords
         tokens = [t for t in line.lower().split() if t not in STOPWORDS]
         if len(tokens) == 0:
             debug_log(f"Removed stopword-only line: {line}")
@@ -107,13 +115,10 @@ class JDPreprocessor:
 
 
 # ---------------------------------------------------------
-# Utility function for external modules
+# Utility wrapper
 # ---------------------------------------------------------
 
 def preprocess_jd(text: str) -> str:
-    """
-    Simple wrapper used by jd_analyzer.
-    """
     processor = JDPreprocessor()
     return processor.preprocess(text)
 
@@ -126,8 +131,10 @@ if __name__ == "__main__":
     • Responsibilities
     - Write clean code
     • Apply strong problem solving skills
+    Apply now
     Click here to apply
     Equal Opportunity Employer statement
+    Python and Git required
     """
 
     print(preprocess_jd(sample))
