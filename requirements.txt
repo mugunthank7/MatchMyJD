@@ -6,3 +6,4 @@ typer[all]
 pypdf
 docx2txt
 python-dotenv
+sentence-transformers>=2.6.0

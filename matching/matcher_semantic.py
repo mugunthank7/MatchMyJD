@@ -1,96 +1,138 @@
 """
-Semantic Matcher (Embeddings)
------------------------------
-Uses Gemini embedding model to compute cosine similarity
-between JD skills and Resume skills.
+matching/matcher_semantic.py
+----------------------------
+Semantic matcher using sentence embeddings.
 
-- No prompting
-- No hallucinations
-- Very fast and inexpensive
-- Returns a score from 0.0 to 1.0
+Outputs a semantic similarity score in [0, 1] between:
+- JD responsibilities/skills
+- Resume projects/evidence/skills
 """
 
-import os
-import numpy as np
-from dotenv import load_dotenv
-import google.generativeai as genai
-from config.settings import debug_log
+from __future__ import annotations
 
-# ============================================================
-# Load API key from .env
-# ============================================================
+from typing import List, Dict, Any
+import math
 
-load_dotenv()
-API_KEY = os.getenv("GEMINI_API_KEY")
+from utils.logger import get_logger
 
-if not API_KEY:
-    raise ValueError("❌ GEMINI_API_KEY not found in .env file.")
+logger = get_logger(__name__)
 
-genai.configure(api_key=API_KEY)
-
-# Official Gemini Embedding Model
-EMBED_MODEL = "models/text-embedding-004"
+_MODEL = None
 
 
-# ============================================================
-# Helper: Generate embedding for text
-# ============================================================
-
-def get_embedding(text: str):
-    try:
-        res = genai.embed_content(
-            model=EMBED_MODEL,
-            content=text
-        )
-        return np.array(res["embedding"], dtype=float)
-
-    except Exception as e:
-        debug_log(f"[EMBED ERROR] {e}")
-        return np.zeros(768)  # safe fallback to avoid crashes
+# ---------------------------------------------------------
+# Lazy load sentence transformer
+# ---------------------------------------------------------
+def _lazy_load_model(model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    global _MODEL
+    if _MODEL is None:
+        from sentence_transformers import SentenceTransformer
+        _MODEL = SentenceTransformer(model_name)
+        logger.info(f"Loaded semantic model: {model_name}")
+    return _MODEL
 
 
-# ============================================================
-# Helper: Cosine similarity
-# ============================================================
+# ---------------------------------------------------------
+# Cosine similarity (no numpy dependency)
+# ---------------------------------------------------------
+def _cosine(a: List[float], b: List[float]) -> float:
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        na += x * x
+        nb += y * y
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (math.sqrt(na) * math.sqrt(nb))
 
-def cosine_similarity(a, b):
-    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+
+# ---------------------------------------------------------
+# Embedding helper
+# ---------------------------------------------------------
+def _embed_texts(texts: List[str]) -> List[List[float]]:
+    if not texts:
+        return []
+
+    model = _lazy_load_model()
+
+    # IMPORTANT: returns List[List[float]]
+    return model.encode(
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True
+    ).tolist()
+
+
+# ---------------------------------------------------------
+# Resume evidence flattening
+# ---------------------------------------------------------
+def _flatten_resume_evidence(skills_with_evidence: Dict[str, List[str]]) -> List[str]:
+    chunks: List[str] = []
+    for skill, evidences in (skills_with_evidence or {}).items():
+        if not skill:
+            continue
+        if evidences:
+            for e in evidences:
+                if e and isinstance(e, str):
+                    chunks.append(f"{skill}: {e}")
+        else:
+            chunks.append(skill)
+    return chunks
+
+
+# ---------------------------------------------------------
+# Pairwise similarity
+# ---------------------------------------------------------
+def _pairwise_max_similarity(A: List[str], B: List[str]) -> float:
+    if not A or not B:
         return 0.0
 
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+    embA = _embed_texts(A)
+    embB = _embed_texts(B)
+
+    best = 0.0
+    for va in embA:
+        for vb in embB:
+            s = _cosine(va, vb)
+            if s > best:
+                best = s
+
+    return max(0.0, min(1.0, best))
 
 
-# ============================================================
-# Public API: semantic similarity score
-# ============================================================
+# ---------------------------------------------------------
+# Public API
+# ---------------------------------------------------------
+def semantic_match_structured(jd_struct: Dict[str, Any], resume_struct: Dict[str, Any]) -> float:
+    jd_responsibilities = jd_struct.get("responsibilities", []) or []
+    jd_must = jd_struct.get("must_have_skills", []) or []
+    jd_nice = jd_struct.get("nice_to_have_skills", []) or []
 
-def semantic_similarity(skill_a: str, skill_b: str) -> float:
-    emb_a = get_embedding(skill_a)
-    emb_b = get_embedding(skill_b)
+    resume_projects = resume_struct.get("projects", []) or []
+    resume_tools = resume_struct.get("tools", []) or []
+    resume_evidence_map = resume_struct.get("skills_with_evidence", {}) or {}
 
-    score = cosine_similarity(emb_a, emb_b)
+    resume_evidence_chunks = _flatten_resume_evidence(resume_evidence_map)
 
-    # Clamp between 0 and 1
-    score = max(0.0, min(1.0, score))
+    resp_vs_projects = _pairwise_max_similarity(
+        jd_responsibilities,
+        resume_projects + resume_evidence_chunks
+    )
 
-    debug_log(f"[SEMANTIC] '{skill_a}' ↔ '{skill_b}' = {score:.3f}")
+    skills_vs_resume = _pairwise_max_similarity(
+        jd_must + jd_nice,
+        list(resume_evidence_map.keys()) + resume_tools
+    )
 
-    return score
+    semantic_score = 0.65 * resp_vs_projects + 0.35 * skills_vs_resume
+    semantic_score = max(0.0, min(1.0, semantic_score))
 
+    logger.info(
+        f"Semantic score: {semantic_score:.3f} | "
+        f"resp_vs_projects={resp_vs_projects:.3f} "
+        f"skills_vs_resume={skills_vs_resume:.3f}"
+    )
 
-# ============================================================
-# Local testing
-# ============================================================
-
-if __name__ == "__main__":
-    tests = [
-        ("machine learning", "ML engineering"),
-        ("python programming", "software development"),
-        ("docker", "containerization"),
-        ("data structures", "algorithms"),
-        ("spark", "hadoop"),
-        ("excel", "deep learning"),
-    ]
-
-    for a, b in tests:
-        print(a, "<->", b, "=", semantic_similarity(a, b))
+    return semantic_score

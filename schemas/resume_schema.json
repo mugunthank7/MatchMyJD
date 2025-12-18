@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ResumeSchema",
+  "type": "object",
+  "required": [
+    "skills_with_evidence",
+    "projects",
+    "tools"
+  ],
+  "properties": {
+    "skills_with_evidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "description": "Skill mapped to evidence like projects, internships, coursework"
+    },
+    "projects": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of relevant projects"
+    },
+    "tools": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tools, frameworks, libraries used"
+    }
+  },
+  "additionalProperties": false
+}

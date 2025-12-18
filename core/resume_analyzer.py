@@ -1,86 +1,118 @@
-import os
-import json
-from dotenv import load_dotenv
-import google.generativeai as genai
-from utils.json_extractor import extract_json_from_text as extract_json
-from core.resume_parser import parse_resume as extract_resume_text
+"""
+core/resume_analyzer.py
+-----------------------
+Chunked Resume Analyzer (PRODUCTION SAFE)
 
-from config.settings import GEMINI_MODEL_RESUME, debug_log
-
-# -----------------------------
-# BUILD RESUME PROMPT (1 CALL)
-# -----------------------------
-def build_resume_prompt(raw_text: str) -> str:
-    return f"""
-Extract the following structured information from this resume.
-Return STRICT JSON ONLY. No markdown, no commentary.
-
-Fields to extract:
-
-{{
-  "technical_skills": [],
-  "tools_and_frameworks": [],
-  "programming_languages": [],
-  "domains": [],
-  "soft_skills": [],
-  "experience_summary": [],
-  "education": [],
-  "certifications": []
-}}
-
-Resume Text:
-{raw_text}
+Strategy:
+- Split resume into sections
+- Run Gemini per section
+- Merge JSON safely
 """
 
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
 
-# -----------------------------
-# CONFIGURE GEMINI
-# -----------------------------
+from config.settings import GEMINI_MODEL_RESUME, MAX_TOKENS_RESUME, debug_log
+from utils.json_extractor import extract_json_from_text
+from utils.helpers import split_resume_into_sections
+
+
+# ---------------------------------------------------------
+# GEMINI CONFIG
+# ---------------------------------------------------------
+
 def configure_gemini():
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("Missing GEMINI_API_KEY in .env")
+        raise RuntimeError("Missing GEMINI_API_KEY")
     genai.configure(api_key=api_key)
-    debug_log("Configured Gemini client for resume analyzer.")
 
 
-# -----------------------------
-# MAIN ANALYZER (1 CALL)
-# -----------------------------
-def analyze_resume(pdf_path: str):
-    debug_log(f"Starting single-shot resume analysis for: {pdf_path}")
+# ---------------------------------------------------------
+# PROMPT
+# ---------------------------------------------------------
 
-    # 1) Extract raw resume text (PDF → text)
-    raw_text = extract_resume_text(pdf_path)
+def build_resume_prompt(section_name: str, section_text: str) -> str:
+    return f"""
+You are an expert technical resume reviewer.
 
-    # 2) Build prompt
-    prompt = build_resume_prompt(raw_text)
+You are analyzing ONLY this resume section: {section_name}
 
-    # 3) Call Gemini once
-    model = genai.GenerativeModel(GEMINI_MODEL_RESUME)
-    response = model.generate_content(prompt)
+Rules:
+- Return ONLY valid JSON
+- DO NOT hallucinate
+- ONLY include skills with CLEAR evidence in this section
+- Skills must be concise (1–3 words)
 
-    # 4) Extract TEXT safely
-    try:
-        text = response.text
-    except:
-        text = response.candidates[0].content.parts[0].text
+Return JSON in EXACTLY this structure:
 
-    debug_log("Raw LLM output (truncated): " + text[:300])
+{{
+  "skills_with_evidence": {{
+    "skill_name": ["evidence"]
+  }},
+  "projects": [],
+  "tools": []
+}}
 
-    # 5) Convert to JSON
-    result = extract_json(text)
-
-    debug_log("Resume analysis complete.")
-    return result
+SECTION TEXT:
+{section_text}
+"""
 
 
-# -----------------------------
-# CLI Usage
-# -----------------------------
-if __name__ == "__main__":
+# ---------------------------------------------------------
+# MAIN ANALYSIS
+# ---------------------------------------------------------
+
+def analyze_resume(resume_text: str) -> dict:
+    debug_log("Starting chunked resume analysis...")
     configure_gemini()
-    pdf = "data/samples/sample_resume.pdf"
-    result = analyze_resume(pdf)
-    print(json.dumps(result, indent=2))
+
+    # 🔒 SAFETY GUARD
+    if isinstance(resume_text, dict):
+        resume_text = resume_text.get("text", "") or ""
+
+    if not isinstance(resume_text, str):
+        raise TypeError(f"analyze_resume expected str, got {type(resume_text)}")
+
+    sections = split_resume_into_sections(resume_text)
+
+    final = {
+        "skills_with_evidence": {},
+        "projects": [],
+        "tools": []
+    }
+
+    model = genai.GenerativeModel(GEMINI_MODEL_RESUME)
+
+    for section_name, section_text in sections.items():
+        if len(section_text.strip()) < 50:
+            continue
+
+        prompt = build_resume_prompt(section_name, section_text)
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "max_output_tokens": MAX_TOKENS_RESUME,
+                "temperature": 0.2
+            }
+        )
+
+        try:
+            raw = response.text
+        except AttributeError:
+            raw = response.candidates[0].content.parts[0].text
+
+        parsed = extract_json_from_text(raw)
+
+        # --- merge safely ---
+        for skill, ev in parsed.get("skills_with_evidence", {}).items():
+            final["skills_with_evidence"].setdefault(skill, []).extend(ev)
+
+        final["projects"].extend(parsed.get("projects", []))
+        final["tools"].extend(parsed.get("tools", []))
+
+    debug_log("Resume analysis completed successfully.")
+    return final

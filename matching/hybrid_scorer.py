@@ -1,187 +1,144 @@
 """
-Hybrid Scorer
--------------
-This module combines:
-- Exact matching
-- Fuzzy token similarity
-- Semantic similarity (LLM)
-into one weighted scoring function.
+matching/hybrid_scorer.py
+-------------------------
+Human-aligned Hybrid Scorer
 
-Final Output:
-{
-    "overall_score": float,
-    "category_scores": {...},
-    "matched": [...],
-    "missing": [...],
-    "extra": [...],
-    "details": { ... per skill explanation ... }
-}
+Inputs:
+- Structured JD (LLM-extracted)
+- Structured Resume (LLM-extracted)
+- Semantic similarity score (embedding-based)
 
-This is the heart of MatchMyJD.
+Design goals:
+- Must-have skills dominate
+- Nice-to-have only boosts
+- Semantic similarity rescues good resumes
+- Evidence increases confidence
+- No single miss can nuke the score
 """
 
-from matching.matcher_exact import exact_match_score
-from matching.matcher_fuzzy import fuzzy_similarity
-from matching.matcher_semantic import semantic_similarity
-from config.settings import CATEGORY_WEIGHTS, debug_log
+from typing import Dict, Any, List
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------
-# Score one pair of skills (JD skill vs resume skill)
+# Helper functions
 # ---------------------------------------------------------
-def score_skill(jd_skill: str, resume_skill: str) -> dict:
+
+def _normalize_list(xs: List[str]) -> List[str]:
+    return [x.lower().strip() for x in xs if isinstance(x, str)]
+
+
+def _must_have_coverage(must_have: List[str], resume_pool: set) -> float:
+    if not must_have:
+        return 1.0
+    matched = sum(1 for s in must_have if s.lower() in resume_pool)
+    return matched / len(must_have)
+
+
+def _nice_to_have_bonus(nice: List[str], resume_pool: set) -> float:
+    if not nice:
+        return 0.0
+    matched = sum(1 for s in nice if s.lower() in resume_pool)
+    # max +15%
+    return min(0.15, matched * 0.05)
+
+
+def _evidence_multiplier(skills_with_evidence: Dict[str, List[str]]) -> float:
     """
-    Returns dict:
+    Boost score if multiple skills have strong evidence.
+    """
+    if not skills_with_evidence:
+        return 1.0
+
+    strong = sum(1 for ev in skills_with_evidence.values() if len(ev) >= 2)
+    if strong >= 4:
+        return 1.12
+    if strong >= 2:
+        return 1.07
+    return 1.0
+
+
+# ---------------------------------------------------------
+# MAIN SCORER
+# ---------------------------------------------------------
+
+def compute_hybrid_score(
+    jd_struct: Dict[str, Any],
+    resume_struct: Dict[str, Any],
+    semantic_score: float
+) -> Dict[str, Any]:
+    """
+    Returns:
     {
-        "exact": 0 or 1,
-        "fuzzy": float,
-        "semantic": float,
-        "combined": float
+      "overall_score": int,
+      "strengths": [...],
+      "gaps": [...],
+      "suggestions": [...]
     }
     """
 
-    e = exact_match_score(jd_skill, resume_skill)
-    f = fuzzy_similarity(jd_skill, resume_skill)
-    s = semantic_similarity(jd_skill, resume_skill)
+    # --- JD ---
+    must_have = _normalize_list(jd_struct.get("must_have_skills", []))
+    nice_to_have = _normalize_list(jd_struct.get("nice_to_have_skills", []))
 
-    # Weighted blending inside skill-level scoring
-    combined = (0.5 * e) + (0.3 * f) + (0.2 * s)
+    # --- Resume ---
+    skills_with_evidence = resume_struct.get("skills_with_evidence", {})
+    resume_skills = _normalize_list(list(skills_with_evidence.keys()))
+    resume_tools = _normalize_list(resume_struct.get("tools", []))
 
-    debug_log(f"[SCORE] {jd_skill} ↔ {resume_skill} = exact={e}, fuzzy={f:.3f}, semantic={s:.3f}, combined={combined:.3f}")
+    resume_pool = set(resume_skills + resume_tools)
 
-    return {
-        "exact": e,
-        "fuzzy": f,
-        "semantic": s,
-        "combined": combined
-    }
+    # --- Core scores ---
+    must_cov = _must_have_coverage(must_have, resume_pool)
+    nice_bonus = _nice_to_have_bonus(nice_to_have, resume_pool)
+    evidence_boost = _evidence_multiplier(skills_with_evidence)
 
+    # Semantic safety net
+    semantic_safe = max(semantic_score, 0.35)
 
-# ---------------------------------------------------------
-# Score an entire category (hard skills, soft skills, tools, domains)
-# ---------------------------------------------------------
-def score_category(category_name: str, jd_list: list, resume_list: list) -> dict:
-    """
-    Returns category-level:
-    {
-        "coverage": float,
-        "matched": [...],
-        "missing": [...],
-        "extra": [...],
-        "score": float,
-        "details": {...}
-    }
-    """
+    # --- Final score composition ---
+    raw = (
+        0.55 * must_cov +
+        0.30 * semantic_safe +
+        0.15          # baseline fairness
+    )
 
-    jd_set = set(jd_list)
-    resume_set = set(resume_list)
+    raw += nice_bonus
+    raw *= evidence_boost
 
-    matched = []
-    missing = []
-    extra = list(resume_set - jd_set)
+    final_score = int(max(35, min(100, raw * 100)))
 
-    details = {}
-    total_combined = 0
-    match_count = 0
+    # -------------------------------------------------
+    # EXPLANATION (HR-readable)
+    # -------------------------------------------------
 
-    for jd_skill in jd_set:
+    strengths = []
+    gaps = []
+    suggestions = []
 
-        # Best matching resume skill for this JD skill
-        best_resume = None
-        best_score = 0
-        best_detail = None
-
-        for rs in resume_set:
-            sc = score_skill(jd_skill, rs)
-            if sc["combined"] > best_score:
-                best_score = sc["combined"]
-                best_resume = rs
-                best_detail = sc
-
-        if best_score >= 0.5:  # threshold for calling it a match
-            matched.append(jd_skill)
-            total_combined += best_score
-            match_count += 1
-
+    for s in must_have:
+        if s in resume_pool:
+            strengths.append(f"Strong evidence for required skill: {s}")
         else:
-            missing.append(jd_skill)
+            gaps.append(s)
+            suggestions.append(f"Build hands-on experience with {s}")
 
-        details[jd_skill] = {
-            "matched_with": best_resume,
-            "scores": best_detail
-        }
+    if semantic_score >= 0.6:
+        strengths.append("Projects align well with job responsibilities")
 
-    coverage = match_count / max(len(jd_set), 1)
-    weighted_score = CATEGORY_WEIGHTS.get(category_name, 1.0) * coverage
+    if skills_with_evidence:
+        strengths.append("Skills are backed by concrete project or work evidence")
 
-    debug_log(f"[CATEGORY] {category_name}: coverage={coverage:.3f}, weighted={weighted_score:.3f}")
-
-    return {
-        "coverage": coverage,
-        "score": weighted_score,
-        "matched": matched,
-        "missing": missing,
-        "extra": extra,
-        "details": details
-    }
-
-
-# ---------------------------------------------------------
-# FINAL HYBRID SCORER (JD analysis + resume analysis)
-# ---------------------------------------------------------
-def hybrid_match(jd_data: dict, resume_data: dict) -> dict:
-    """
-    Main entry point.
-    Expects normalized jd_data + resume_data:
-    {
-        "hard_skills": [...],
-        "soft_skills": [...],
-        "tools": [...],
-        "domains": [...]
-    }
-    """
-
-    debug_log("[HYBRID] Starting hybrid matching...")
-
-    categories = ["hard_skills", "soft_skills", "tools_and_frameworks", "domains"]
-
-    results = {}
-    final_score = 0
-
-    for cat in categories:
-        jd_list = jd_data.get(cat, [])
-        resume_list = resume_data.get(cat.replace("tools_and_frameworks", "tools"), resume_data.get(cat, []))
-
-        res = score_category(cat, jd_list, resume_list)
-        results[cat] = res
-        final_score += res["score"]
-
-    final_score = round(final_score * 100, 2)  # convert to percentage
-
-    debug_log(f"[HYBRID] Final score = {final_score}")
+    logger.info(
+        f"[HYBRID] score={final_score} | must_cov={must_cov:.2f} "
+        f"semantic={semantic_score:.2f} evidence_boost={evidence_boost}"
+    )
 
     return {
         "overall_score": final_score,
-        "categories": results
+        "strengths": strengths,
+        "gaps": gaps,
+        "suggestions": suggestions
     }
-
-
-# ---------------------------------------------------------
-# Local test block
-# ---------------------------------------------------------
-if __name__ == "__main__":
-    jd = {
-        "hard_skills": ["python", "data structures", "algorithms"],
-        "soft_skills": ["teamwork"],
-        "tools": ["git", "docker"],
-        "domains": ["software engineering"]
-    }
-
-    resume = {
-        "hard_skills": ["python", "machine learning", "data structures"],
-        "soft_skills": ["teamwork", "communication"],
-        "tools": ["git", "docker"],
-        "domains": ["software engineering", "data science"]
-    }
-
-    print(hybrid_match(jd, resume))

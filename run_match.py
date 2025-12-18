@@ -2,20 +2,25 @@
 
 """
 MatchMyJD Pipeline Runner
-Loads API key from .env automatically.
-Does NOT expose key at any point.
+------------------------
+End-to-end execution using:
+- PDF → text resume parser
+- Chunked LLM resume analyzer
+- LLM JD analyzer
+- Semantic matcher (embeddings)
+- Human-aligned hybrid scorer
 """
 
 import json
-import os
-from dotenv import load_dotenv
-import google.generativeai as genai
+from utils.logger import get_logger
 
-from config.settings import debug_log
+from core.resume_parser import parse_resume   # PDF → dict
 from core.resume_analyzer import analyze_resume
 from core.jd_analyzer import analyze_jd
-from matching.hybrid_scorer import hybrid_match
+from matching.matcher_semantic import semantic_match_structured
+from matching.hybrid_scorer import compute_hybrid_score
 
+logger = get_logger(__name__)
 
 # -----------------------------------------------
 # PATHS
@@ -25,45 +30,50 @@ JD_PATH = "data/samples/sample_jd.txt"
 
 
 # -----------------------------------------------
-# Load .env and configure Gemini
-# -----------------------------------------------
-def configure_gemini():
-    # Load environment file
-    load_dotenv()
-
-    api_key = os.getenv("GEMINI_API_KEY")
-
-    if not api_key:
-        raise ValueError("❌ GEMINI_API_KEY not found in .env")
-
-    genai.configure(api_key=api_key)
-    debug_log("Gemini client configured using key from .env")
-
-
-# -----------------------------------------------
 # Main Pipeline
 # -----------------------------------------------
 def run_pipeline():
+    logger.info("🚀 Starting MatchMyJD pipeline...")
 
-    debug_log("🚀 Starting MatchMyJD pipeline...")
+    # --- Resume ---
+    resume_data = parse_resume(RESUME_PATH)
 
-    configure_gemini()
+    # ✅ FIX: parser returns "raw_text", not "text"
+    if isinstance(resume_data, dict):
+        resume_text = resume_data.get("raw_text", "")
+    else:
+        resume_text = resume_data
 
-    # Analyze Resume
-    resume_data = analyze_resume(RESUME_PATH)
+    if not isinstance(resume_text, str) or not resume_text.strip():
+        raise ValueError("❌ Failed to extract resume text")
 
-    # Analyze JD
-    with open(JD_PATH, "r") as f:
+    resume_struct = analyze_resume(resume_text)
+
+    # --- JD ---
+    with open(JD_PATH, "r", encoding="utf-8") as f:
         jd_text = f.read()
 
-    jd_data = analyze_jd(jd_text)
+    jd_struct = analyze_jd(jd_text)
 
-    # Hybrid scoring
-    result = hybrid_match(jd_data, resume_data)
+    # --- Semantic Matching ---
+    semantic_score = semantic_match_structured(jd_struct, resume_struct)
 
-    return result
+    # --- Hybrid Scoring ---
+    final_result = compute_hybrid_score(
+        jd_struct=jd_struct,
+        resume_struct=resume_struct,
+        semantic_score=semantic_score
+    )
+
+    return {
+        "semantic_score": round(float(semantic_score), 3),
+        **final_result
+    }
 
 
+# -----------------------------------------------
+# CLI Entry
+# -----------------------------------------------
 if __name__ == "__main__":
     output = run_pipeline()
 

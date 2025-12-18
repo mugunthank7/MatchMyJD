@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JobDescriptionSchema",
+  "type": "object",
+  "required": [
+    "must_have_skills",
+    "nice_to_have_skills",
+    "responsibilities",
+    "seniority"
+  ],
+  "properties": {
+    "must_have_skills": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Critical skills explicitly required in the JD"
+    },
+    "nice_to_have_skills": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional or preferred skills"
+    },
+    "responsibilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key responsibilities or role expectations"
+    },
+    "seniority": {
+      "type": "string",
+      "enum": ["entry", "mid", "senior"],
+      "description": "Inferred seniority level"
+    }
+  },
+  "additionalProperties": false
+}
